@@ -49,7 +49,7 @@ def dag_projet():
     def transform(date,
                   paths=None):
         if paths is None:  # Pour tester
-            paths = dict(local_filename='/tmp/yellow_tripdata_2019-01.csv')
+            paths = dict(local_filename='~/PycharmProjects/NY_Project/data/yellow_tripdata_2019-01.csv')
         print("paths", paths)
         # On charge le fichier en local
         monthly_data = pd.read_csv(paths["local_filename"], sep=",", header=0)
@@ -59,7 +59,9 @@ def dag_projet():
         monthly_data["day"] = monthly_data["tpep_pickup_datetime"].dt.day
 
         # On recupere uniquement le jour qui nous interesse
-        day = date[-2:]
+        day = int(date[-2:])
+        print("day : ",day)
+        print(monthly_data)
         daily_data = monthly_data[monthly_data["day"] == day]
         daily_data["month"] = int(date[-5:-3])
 
@@ -72,6 +74,8 @@ def dag_projet():
 
     @task()
     def load(filepath):  # TODO faire l'insertion dans la table dynamoDB
+        if filepath is None:
+            filepath = '~/PycharmProjects/NY_Project/data/yellow_tripdata_2019-01.csv'
         # On lit le csv temporaire
         df = pd.read_csv(filepath).head(n=100)
 
@@ -105,7 +109,7 @@ def dag_projet():
 DAG_NAME_2 = DAG_NAME + "_2"
 
 
-@dag(DAG_NAME, default_args=default_args, schedule_interval="0 0 * * *",
+@dag(DAG_NAME_2, default_args=default_args, schedule_interval="0 0 * * *",
      start_date=days_ago(2))  # TODO changer le start date
 def dag_projet_2():
     """
