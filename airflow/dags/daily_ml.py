@@ -20,19 +20,15 @@ default_args = {
     'retry_delay': timedelta(seconds=10)
 }
 
-
-# TODO
-
-
-@dag(DAG_NAME, default_args=default_args, schedule_interval="0 0 * * *", start_date=days_ago(2))
+@dag(DAG_NAME, default_args=default_args, schedule_interval="0 0 * * *", start_date=days_ago(2)) # TODO start date to change
 def dag_projet():
     """
-    Ce DAG est notre réponse à la première problématique du sujet
+    Ce DAG est notre réponse à la première problématique du sujet # TODO update
     """
 
     # Charge les données depuis S3
     @task()
-    def extract():
+    def extract(): # TODO passer la date en parametre, charger uniquement le fichier du mois
         s3 = boto3.client(
             "s3",
             aws_access_key_id=AWS_ACCESS_KEY,
@@ -46,7 +42,7 @@ def dag_projet():
         return dict(january="/tmp/yellow_tripdata_2019-01.csv", february="/tmp/yellow_tripdata_2019-02.csv")
 
     @task()
-    def transform(date,paths=None): # TODO Ajouter la deuxieme partie de la question
+    def transform(date,paths=None): # TODO faire uniquement pour 1 fichier, renommer les variables
         if paths is None:
             paths = dict(january="/home/noobzik/Documents/ESGI/5A/S1/5-AWS/projet/NY_Project/yellow_tripdata_2019-02.csv",
                          february="/home/noobzik/Documents/ESGI/5A/S1/5-AWS/projet/NY_Project/yellow_tripdata_2019-02.csv")
@@ -79,7 +75,7 @@ def dag_projet():
         return "/tmp/yellow_cab_3_"+str(month)+"_"+str(day)+".csv"
 
     @task()
-    def load(filepath): # TODO faire l'insertion dans la table dynamoDB
+    def load(filepath): # TODO tout changer pour load dans s3. Passer la date en parametre et utiliser la date pour le nom du fichier
         df = pd.read_csv(filepath).head(n=100)
         dynamodb = boto3.resource(
             "dynamodb",

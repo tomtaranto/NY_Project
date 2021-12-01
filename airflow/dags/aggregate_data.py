@@ -20,10 +20,6 @@ default_args = {
     'retry_delay': timedelta(seconds=10)
 }
 
-
-# TODO
-
-
 @dag(DAG_NAME, default_args=default_args, schedule_interval="0 0 * * *", start_date=days_ago(2))
 def dag_projet():
     """
@@ -32,7 +28,7 @@ def dag_projet():
 
     # Charge les données depuis S3
     @task()
-    def extract():
+    def extract(): #TODO mettre la date en parametre et recuperer uniquement le fichier qui correspond au mois et a l annee
         s3 = boto3.client(
             "s3",
             aws_access_key_id=AWS_ACCESS_KEY,
@@ -40,13 +36,13 @@ def dag_projet():
             region_name="eu-west-1"
         )
         s3.download_file('projet-airflow-airbnb-esgi-2021', 'yellow_tripdata_2019-01.csv',
-                         '/tmp/yellow_tripdata_2019-01.csv')  # TODO change bucket name
+                         '/tmp/yellow_tripdata_2019-01.csv')  # TODO change bucket name and file name
         s3.download_file('projet-airflow-airbnb-esgi-2021', 'yellow_tripdata_2019-02.csv',
                          '/tmp/yellow_tripdata_2019-02.csv')  # TODO change bucket name
         return dict(january="/tmp/yellow_tripdata_2019-01.csv", february="/tmp/yellow_tripdata_2019-02.csv")
 
     @task()
-    def transform(paths=None): # TODO Ajouter la deuxieme partie de la question
+    def transform(paths=None): # TODO Uniquement prendre un fichier, pas deux, renommer les variables commenter le code
         if paths is None:
             paths = dict(january="/home/noobzik/Documents/ESGI/5A/S1/5-AWS/projet/NY_Project/yellow_tripdata_2019-02.csv",
                          february="/home/noobzik/Documents/ESGI/5A/S1/5-AWS/projet/NY_Project/yellow_tripdata_2019-02.csv")
@@ -98,15 +94,17 @@ def dag_projet():
     load(filepath)
 
 
-@dag(DAG_NAME, default_args=default_args, schedule_interval="0 0 * * *", start_date=days_ago(2))
+
+DAG_NAME_2 = DAG_NAME+"_2"
+@dag(DAG_NAME, default_args=default_args, schedule_interval="0 0 * * *", start_date=days_ago(2)) # TODO changer le start date
 def dag_projet_2():
     """
-    Ce DAG est notre réponse à la première problématique du sujet
+    Ce DAG est notre réponse à la première problématique du sujet # TODO update ça
     """
 
     # Charge les données depuis S3
     @task()
-    def extract_2():
+    def extract_2(): # TODO passer la date en parametre et recuperer uniquement le fichier du mois
         s3 = boto3.client(
             "s3",
             aws_access_key_id=AWS_ACCESS_KEY,
@@ -120,7 +118,7 @@ def dag_projet_2():
         return dict(january="/tmp/yellow_tripdata_2019-01.csv", february="/tmp/yellow_tripdata_2019-02.csv")
 
     @task()
-    def transform_2(paths=None): # TODO Ajouter la deuxieme partie de la question
+    def transform_2(paths=None): # TODO supprimer le deuxieme mois, enlever le concat, rename les variables
         if paths is None:
             paths = dict(january="/home/noobzik/Documents/ESGI/5A/S1/5-AWS/projet/NY_Project/yellow_tripdata_2019-02.csv",
                          february="/home/noobzik/Documents/ESGI/5A/S1/5-AWS/projet/NY_Project/yellow_tripdata_2019-02.csv")
@@ -193,4 +191,4 @@ def dag_projet_2():
     
     
 dag_projet_instances = dag_projet()  # Instanciation du DAG
-dag_projet_instances = dag_projet_2() 
+dag_projet_instances_2 = dag_projet_2()
