@@ -1,5 +1,6 @@
 import os
 import boto3
+import botocore
 import pandas as pd
 
 from datetime import timedelta
@@ -13,7 +14,7 @@ DAG_NAME = os.path.basename(__file__).replace(".py", "")  # Le nom du DAG est le
 
 AWS_ACCESS_KEY = Variable.get("AWS_ACCESS_KEY_ID")
 AWS_SECRET_KEY = Variable.get("AWS_SECRET_ACCESS_KEY")
-
+AWS_S3_BUCKET_NAME = Variable.get("AWS_S3_BUCKET_NAME")
 default_args = {
     'owner': 'tom',
     'retries': 1,
@@ -43,6 +44,12 @@ def dag_projet():
         local_filename = '/tmp/' + s3_filename
         s3.download_file('projet-airflow-airbnb-esgi-2021', s3_filename,
                          local_filename)  # TODO change bucket name and file name, utiliser un try,except pour dl le fichier?
+        try:
+            s3.Bucket(AWS_S3_BUCKET_NAME).download_file('projet-airflow-airbnb-esgi-2021', s3_filename,
+                                                        local_filename)
+        except botocore.exceptions.ClientError as e:
+            print("Returned error S3 : " + e.response['Error']['Code'])
+
         return dict(local_filename=local_filename)
 
     @task()
