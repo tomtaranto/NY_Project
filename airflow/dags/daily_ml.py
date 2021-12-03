@@ -8,11 +8,14 @@ from airflow.decorators import dag, task
 from airflow.operators.bash import BashOperator
 from airflow.models import Variable
 from decimal import Decimal
+from io import StringIO
 
 DAG_NAME = os.path.basename(__file__).replace(".py", "")  # Le nom du DAG est le nom du fichier
 
 AWS_ACCESS_KEY = Variable.get("AWS_ACCESS_KEY_ID")
 AWS_SECRET_KEY = Variable.get("AWS_SECRET_ACCESS_KEY")
+AWS_S3_BUCKET_NAME_ML = Variable.get("AWS_S3_BUCKET_NAME_ML")
+AWS_S3_BUCKET_NAME = Variable.get("AWS_S3_BUCKET_NAME")
 
 default_args = {
     'owner': 'tom',
@@ -20,7 +23,7 @@ default_args = {
     'retry_delay': timedelta(seconds=10)
 }
 
-@dag(DAG_NAME, default_args=default_args, schedule_interval="0 0 * * *", start_date=days_ago(2)) # TODO start date to change
+@dag(DAG_NAME, default_args=default_args, schedule_interval="0 0 * * *", start_date=days_ago(2))
 def dag_projet():
     """
     Ce DAG est notre réponse à la première problématique du sujet # TODO update
@@ -28,18 +31,22 @@ def dag_projet():
 
     # Charge les données depuis S3
     @task()
-    def extract(): # TODO passer la date en parametre, charger uniquement le fichier du mois
+    def extract(date):
         s3 = boto3.client(
             "s3",
             aws_access_key_id=AWS_ACCESS_KEY,
             aws_secret_access_key=AWS_SECRET_KEY,
-            region_name="eu-west-1"
+            region_name="eu-west-3"
         )
-        s3.download_file('projet-airflow-airbnb-esgi-2021', 'yellow_tripdata_2019-01.csv',
-                         '/tmp/yellow_tripdata_2019-01.csv')  # TODO change bucket name
-        s3.download_file('projet-airflow-airbnb-esgi-2021', 'yellow_tripdata_2019-02.csv',
-                         '/tmp/yellow_tripdata_2019-02.csv')  # TODO change bucket name
-        return dict(january="/tmp/yellow_tripdata_2019-01.csv", february="/tmp/yellow_tripdata_2019-02.csv")
+        month = date[-5:-3]
+        year = date[0:4]
+        s3_filename = 'yellow_tripdata_' + year + '-' + month + '.csv'
+        local_filename = '/tmp/' + s3_filename
+        print("s3_filename",s3_filename)
+        if not os.path.isfile(local_filename): # TODO remove after testings
+            s3.download_file('esginyprojectrawdata', s3_filename,
+                             local_filename)
+        return dict(local_filename=local_filename)
 
     @task()
     def transform(date,paths=None): # TODO faire uniquement pour 1 fichier, renommer les variables
@@ -48,58 +55,49 @@ def dag_projet():
                          february="/home/noobzik/Documents/ESGI/5A/S1/5-AWS/projet/NY_Project/yellow_tripdata_2019-02.csv")
         print("date", date)
         print(type(date))
-        day = date[-2:]
+        day = int(date[-2:])
         print("day : ", day)
         print("paths", paths)
-        month = date[-5:-3]
-        january = pd.read_csv(paths["january"], sep=",", header=0)
-        february = pd.read_csv(paths["february"], sep=",", header=0)
-        print(february)
-        february["tpep_pickup_datetime"] = pd.to_datetime(february["tpep_pickup_datetime"])
-        february["day"] = february["tpep_pickup_datetime"].dt.day
-        february["month"] = 2
-        
+        month = int(date[-5:-3])
+        monthly_data = pd.read_csv(paths["local_filename"], sep=",", header=0)
+        # On passe les colonnes en date
+        monthly_data["tpep_pickup_datetime"] = pd.to_datetime(monthly_data["tpep_pickup_datetime"])
+        monthly_data["day"] = monthly_data["tpep_pickup_datetime"].dt.day
 
-        grouped_id_day_february = february.groupby(by=["day", 'tpep_pickup_datetime', 'tpep_dropoff_datetime', 'passenger_count','PULocationID', 'DOLocationID','improvement_surcharge', 'total_amount', 'congestion_surcharge', 'month']).size().reset_index(name='counts')
+        daily_data = monthly_data[monthly_data["day"]==day]
 
-        january["tpep_pickup_datetime"] = pd.to_datetime(january["tpep_pickup_datetime"])
-        january["day"] = january["tpep_pickup_datetime"].dt.day
-        january["month"] = 1
+        daily_data["tpep_pickup_datetime"] = pd.to_datetime(daily_data["tpep_pickup_datetime"])
+        daily_data["day"] = daily_data["tpep_pickup_datetime"].dt.day
+        daily_data["month"] = month
 
-        grouped_id_day_january = january.groupby(
+        res = daily_data.groupby(
             by=["day", 'tpep_pickup_datetime', 'tpep_dropoff_datetime', 'passenger_count','PULocationID', 'DOLocationID','improvement_surcharge', 'total_amount', 'congestion_surcharge', 'month']).size().reset_index(name='counts')
-        res = pd.concat([grouped_id_day_january, grouped_id_day_february], ignore_index=True)
-        res=res[res["day"]==int(day)]
         res = res[res["month"]==int(month)]
         res.to_csv("/tmp/yellow_cab_3_"+str(month)+"_"+str(day)+".csv", index=False)
         return "/tmp/yellow_cab_3_"+str(month)+"_"+str(day)+".csv"
 
     @task()
-    def load(filepath): # TODO tout changer pour load dans s3. Passer la date en parametre et utiliser la date pour le nom du fichier
-        df = pd.read_csv(filepath).head(n=100)
-        dynamodb = boto3.resource(
-            "dynamodb",
-            aws_access_key_id=AWS_ACCESS_KEY,
-            aws_secret_access_key=AWS_SECRET_KEY,
-            region_name="eu-west-1"
-        )
-        table = dynamodb.Table("listings_prices")
+    def load(date, filepath): #
+        bucket = AWS_S3_BUCKET_NAME_ML
+        csv_buffer = StringIO()
+        df = pd.read_csv(filepath)
+        df.to_csv(csv_buffer)
+        s3_filename = date[:4]+"_"+date[-5:-3]+"_"+date[-2:]+"_"+"df.csv"
+        s3_resource = boto3.resource('s3')
+        s3_resource.Object(bucket, s3_filename).put(Body = csv_buffer.getvalue())
+        return filepath
 
-        def put_row(row, batch):
-            batch.put_item(
-                Item={
-                    'listing_id': int(row["listing_id"]),
-                    'week': int(row["week"]),
-                    'price': Decimal(str(row["price"]))
-                }
-            )
+    @task()
+    def clean(filepath):
+        os.remove(filepath)
+        return 1
 
-        with table.batch_writer() as batch:
-            df.apply(lambda x: put_row(x, batch), axis=1)
+        
 
-    paths = extract()
-    filepath = transform("{{ ds }}",paths)
-    load(filepath)
+    paths = extract("{{ yesterday_ds }}")
+    filepath = transform("{{ yesterday_ds }}",paths)
+    tmp_files = load("{{ yesterday_ds }}",filepath)
+    cleaning = clean(tmp_files)
 
 
 dag_projet_instances = dag_projet()  # Instanciation du DAG

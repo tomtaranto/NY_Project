@@ -43,8 +43,9 @@ def dag_projet():
         s3_filename = 'yellow_tripdata_' + year + '-' + month + '.csv'
         local_filename = '/tmp/' + s3_filename
         print("s3_filename",s3_filename)
-        s3.download_file('esginyprojectrawdata', s3_filename,
-                         local_filename)
+        if not os.path.isfile(local_filename): # TODO remove after testings
+            s3.download_file('esginyprojectrawdata', s3_filename,
+                             local_filename)
         return dict(local_filename=local_filename)
 
     @task()
@@ -88,7 +89,7 @@ def dag_projet():
             aws_secret_access_key=AWS_SECRET_KEY,
             region_name="eu-west-3"
         )
-        table = dynamodb.Table("table2")
+        table = dynamodb.Table("esginyprojectdaily1")
 
         def put_row(row, batch):
             id = str(int(row.name)+int(row["month"])*100+int(float(row["day"]))+1000*int(row["VendorID"]))
@@ -104,10 +105,19 @@ def dag_projet():
 
         with table.batch_writer() as batch:
             df.apply(lambda x: put_row(x, batch), axis=1)
+        return filepath
+
+    @task()
+    def clean(paths):
+        os.remove(paths)
+        return 1
 
     paths = extract("{{ yesterday_ds }}")
     filepath = transform("{{ yesterday_ds }}", paths)
-    load(filepath)
+    tmp_files = load(filepath)
+    cleaning = clean(tmp_files)
+    #paths >> filepath >> load >> cleaning
+
 
 
 DAG_NAME_2 = DAG_NAME + "_2"
@@ -135,8 +145,10 @@ def dag_projet_2():
         s3_filename = 'yellow_tripdata_' + year + '-' + month + '.csv'
         local_filename = '/tmp/' + s3_filename
         print("s3_filename : ",s3_filename)
-        s3.download_file('esginyprojectrawdata', s3_filename,
-                         local_filename)
+
+        if not os.path.isfile(local_filename): # TODO remove after testings
+            s3.download_file('esginyprojectrawdata', s3_filename,
+                             local_filename)
         return dict(local_filename=local_filename)
 
     @task()
@@ -189,7 +201,7 @@ def dag_projet_2():
             aws_secret_access_key=AWS_SECRET_KEY,
             region_name="eu-west-3"
         )
-        table = dynamodb.Table("esgi_data_2021")
+        table = dynamodb.Table("esginyprojectdaily2")
         def put_row(row, batch):
             index = row.index
             month = row["month"]
@@ -206,11 +218,25 @@ def dag_projet_2():
 
         with table.batch_writer() as batch:
             df.apply(lambda x: put_row(x, batch), axis=1)
+        return filepath
+
+    @task()
+    def clean_2(paths):
+        os.remove(paths)
+        return 1
 
     paths = extract_2("{{ yesterday_ds }}")
     filepath = transform_2("{{ yesterday_ds }}",paths)
-    load_2(filepath)
+    tmp_files = load_2(filepath)
+    cleaning = clean_2(tmp_files)
+    #paths >> filepath >> load >> cleaning
+    
 
 
 dag_projet_instances = dag_projet()  # Instanciation du DAG
 dag_projet_instances_2 = dag_projet_2()
+
+
+# Pour run:
+#airflow dags backfill --start-date 2019-01-02 --end-date 2019-01-03 --reset-dagruns daily_ml
+# airflow tasks test aggregate_data_2 2019-01-02
