@@ -2,6 +2,7 @@ import os
 import boto3
 import botocore
 import pandas as pd
+import pathlib
 
 from datetime import timedelta
 from airflow.utils.dates import days_ago
@@ -15,12 +16,16 @@ DAG_NAME = os.path.basename(__file__).replace(".py", "")  # Le nom du DAG est le
 AWS_ACCESS_KEY = Variable.get("AWS_ACCESS_KEY_ID")
 AWS_SECRET_KEY = Variable.get("AWS_SECRET_ACCESS_KEY")
 AWS_S3_BUCKET_NAME = Variable.get("AWS_S3_BUCKET_NAME")
+AWS_S3_BUCKET_RAW_NAME = Variable.get("AWS_S3_BUCKET_NAME")
+AWS_S3_REGION = Variable.get("AWS_S3_REGION")
+
 default_args = {
     'owner': 'tom',
     'retries': 1,
     'retry_delay': timedelta(seconds=10)
 }
-
+current_dir = pathlib.Path.cwd()
+print(current_dir)
 
 @dag(DAG_NAME, default_args=default_args, schedule_interval="0 0 * * *", start_date=days_ago(2))
 def dag_projet():
@@ -36,7 +41,7 @@ def dag_projet():
             "s3",
             aws_access_key_id=AWS_ACCESS_KEY,
             aws_secret_access_key=AWS_SECRET_KEY,
-            region_name="eu-west-3"
+            region_name=AWS_S3_REGION
         )
         month = date[-5:-3]
         year = date[0:4]
@@ -44,7 +49,7 @@ def dag_projet():
         local_filename = '/tmp/' + s3_filename
         print("s3_filename",s3_filename)
         if not os.path.isfile(local_filename): # TODO remove after testings
-            s3.download_file('esginyprojectrawdata', s3_filename,
+            s3.download_file(AWS_S3_BUCKET_RAW_NAME, s3_filename,
                              local_filename)
         return dict(local_filename=local_filename)
 
@@ -52,7 +57,8 @@ def dag_projet():
     def transform(date,
                   paths=None):
         if paths is None:  # Pour tester
-            paths = dict(local_filename='~/PycharmProjects/NY_Project/data/yellow_tripdata_2019-01.csv')
+            paths = dict(
+                local_filename='~/Documents/ESGI/5A/S1/5-AWS/projet/NY_Project/data/yellow_tripdata_2019-01.csv')
         print("paths", paths)
         # On charge le fichier en local
         monthly_data = pd.read_csv(paths["local_filename"], sep=",", header=0)
@@ -87,7 +93,7 @@ def dag_projet():
             "dynamodb",
             aws_access_key_id=AWS_ACCESS_KEY,
             aws_secret_access_key=AWS_SECRET_KEY,
-            region_name="eu-west-3"
+            region_name=AWS_S3_REGION
         )
         table = dynamodb.Table("esginyprojectdaily1")
 
@@ -138,7 +144,7 @@ def dag_projet_2():
             "s3",
             aws_access_key_id=AWS_ACCESS_KEY,
             aws_secret_access_key=AWS_SECRET_KEY,
-            region_name="eu-west-3"
+            region_name=AWS_S3_REGION
         )
         month = date[-5:-3]
         year = date[0:4]
@@ -147,14 +153,15 @@ def dag_projet_2():
         print("s3_filename : ",s3_filename)
 
         if not os.path.isfile(local_filename): # TODO remove after testings
-            s3.download_file('esginyprojectrawdata', s3_filename,
+            s3.download_file(AWS_S3_BUCKET_RAW_NAME, s3_filename,
                              local_filename)
         return dict(local_filename=local_filename)
 
     @task()
     def transform_2(date, paths=None):  # TODO supprimer le deuxieme mois, enlever le concat, rename les variables
         if paths is None:  # Pour tester
-            paths = dict(local_filename='~/PycharmProjects/NY_Project/data/yellow_tripdata_2019-01.csv')
+            paths = dict(
+                local_filename='~/Documents/ESGI/5A/S1/5-AWS/projet/NY_Project/data/yellow_tripdata_2019-01.csv')
 
         print("paths", paths)
         monthly_data = pd.read_csv(paths["local_filename"], sep=",", header=0)
@@ -199,7 +206,7 @@ def dag_projet_2():
             "dynamodb",
             aws_access_key_id=AWS_ACCESS_KEY,
             aws_secret_access_key=AWS_SECRET_KEY,
-            region_name="eu-west-3"
+            region_name=AWS_S3_REGION
         )
         table = dynamodb.Table("esginyprojectdaily2")
         def put_row(row, batch):
