@@ -60,8 +60,10 @@ def dag_projet():
             paths = dict(
                 local_filename='~/Documents/ESGI/5A/S1/5-AWS/projet/NY_Project/data/yellow_tripdata_2019-01.csv')
         print("paths", paths)
+        
+        fields = ['tpep_pickup_datetime','VendorID', 'total_amount']        
         # On charge le fichier en local
-        monthly_data = pd.read_csv(paths["local_filename"], sep=",", header=0)
+        monthly_data = pd.read_csv(paths["local_filename"], sep=",", header=0, skipinitialspace=True, usecols=fields)
 
         # On passe les colonnes en date
         monthly_data["tpep_pickup_datetime"] = pd.to_datetime(monthly_data["tpep_pickup_datetime"])
@@ -86,7 +88,7 @@ def dag_projet():
         if filepath is None:
             filepath = '~/PycharmProjects/NY_Project/data/yellow_tripdata_2019-01.csv'
         # On lit le csv temporaire
-        df = pd.read_csv(filepath).head(n=100)
+        df = pd.read_csv(filepath)
 
         # On instancie notre table dynamoDB
         dynamodb = boto3.resource(
@@ -164,7 +166,9 @@ def dag_projet_2():
                 local_filename='~/Documents/ESGI/5A/S1/5-AWS/projet/NY_Project/data/yellow_tripdata_2019-01.csv')
 
         print("paths", paths)
-        monthly_data = pd.read_csv(paths["local_filename"], sep=",", header=0)
+        
+        fields = ['tpep_pickup_datetime', 'DOLocationID', 'PULocationID']
+        monthly_data = pd.read_csv(paths["local_filename"], sep=",", header=0, skipinitialspace=True, usecols=fields)
 
         monthly_data["tpep_pickup_datetime"] = pd.to_datetime(monthly_data["tpep_pickup_datetime"])
         monthly_data["day"] = monthly_data["tpep_pickup_datetime"].dt.day
@@ -201,7 +205,7 @@ def dag_projet_2():
     def load_2(filepath):  # TODO faire l'insertion dans la table dynamoDB
         if filepath is None:
             filepath = '/tmp/yellow_cab_2.csv'
-        df = pd.read_csv(filepath, sep=',', header=0).head(n=100)
+        df = pd.read_csv(filepath, sep=',', header=0)
         dynamodb = boto3.resource(
             "dynamodb",
             aws_access_key_id=AWS_ACCESS_KEY,
